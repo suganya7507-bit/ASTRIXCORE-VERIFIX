@@ -25,6 +25,10 @@ from app.api.v1 import (
     reports,
     waveform,
     billing,
+    requirements,
+    impact,
+    flaky,
+    risk,
 )
 
 logging.basicConfig(
@@ -88,6 +92,10 @@ app.include_router(analysis.router, prefix=API_PREFIX, tags=["Analysis"])
 app.include_router(ai_agents.router, prefix=API_PREFIX, tags=["AI Agents"])
 app.include_router(spec_analysis.router, prefix=API_PREFIX, tags=["Specification"])
 app.include_router(billing.router, prefix=API_PREFIX, tags=["Billing"])
+app.include_router(requirements.router, prefix=API_PREFIX, tags=["Requirements"])
+app.include_router(impact.router, prefix=API_PREFIX, tags=["Impact Analysis"])
+app.include_router(flaky.router, prefix=API_PREFIX, tags=["Flaky Detection"])
+app.include_router(risk.router, prefix=API_PREFIX, tags=["Risk Scoring"])
 
 
 # ─── WebSocket for real-time updates ──────────────────────────────────

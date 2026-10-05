@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Upload, Search, GitCompare, Loader2, AlertTriangle, X } from "lucide-react";
+import { Upload, Search, GitCompare, Loader2, AlertTriangle, X, Sparkles, Zap, MessageSquare, ArrowUpRight, HelpCircle, ChevronDown, ChevronUp } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { api, waveformApi } from "@/lib/api";
@@ -56,9 +56,86 @@ interface SignalContext {
   >;
 }
 
+// AI Failure Annotation Types
+interface AIFailureAnnotation {
+  id: string;
+  signal_name: string;
+  time: number;
+  type: "glitch" | "timing_violation" | "protocol_violation" | "unknown_state" | "timing" | "protocol" | "state";
+  severity: "critical" | "high" | "medium" | "low";
+  confidence: number; // 0-100
+  description: string;
+  suggested_fix: string;
+  related_signals: string[];
+  evidence: string;
+}
+
+interface AIAnalysisResult {
+  waveform_id: string;
+  annotations: AIFailureAnnotation[];
+  summary: {
+    total_anomalies: number;
+    critical_count: number;
+    high_count: number;
+    affected_signals: string[];
+  };
+  generated_at: string;
+}
+
+interface WaveformUpload {
+  waveform_id: string;
+  filename: string;
+  format: string;
+  signals_count: number;
+  time_range: { min: number; max: number };
+  timescale: string;
+  date: string;
+}
+
+interface WaveformAnalysis {
+  waveform_id: string;
+  filename: string;
+  format: string;
+  timescale: string;
+  time_range: { min: number; max: number };
+  total_signals: number;
+  signals: Signal[];
+}
+
+interface SignalContext {
+  failure_time: number;
+  window: number;
+  signals: Record<
+    string,
+    {
+      value_at_failure: string;
+      transitions_near_failure: { time: number; value: string }[];
+      total_transitions_in_window: number;
+    }
+  >;
+}
+
 const ROW_HEIGHT = 28;
 const LABEL_WIDTH = 200;
 const MAX_ROWS = 60;
+
+// AI Annotation colors by severity
+const SEVERITY_COLORS = {
+  critical: { bg: "bg-red-500/20", border: "border-red-500", text: "text-red-300", glow: "text-red-400" },
+  high: { bg: "bg-orange-500/20", border: "border-orange-500", text: "text-orange-300", glow: "text-orange-400" },
+  medium: { bg: "bg-yellow-500/20", border: "border-yellow-500", text: "text-yellow-300", glow: "text-yellow-400" },
+  low: { bg: "bg-blue-500/20", border: "border-blue-500", text: "text-blue-300", glow: "text-blue-400" },
+};
+
+const TYPE_ICONS = {
+  glitch: Zap,
+  timing_violation: AlertTriangle,
+  protocol_violation: MessageSquare,
+  unknown_state: HelpCircle,
+  timing: AlertTriangle,
+  protocol: MessageSquare,
+  state: Zap,
+};
 
 function formatTime(time: number, timescale: string) {
   return `${time} ${timescale}`;
@@ -84,6 +161,13 @@ export function WaveformViewer() {
   const [comparison, setComparison] = useState<any>(null);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // AI Annotation state
+  const [aiAnnotations, setAiAnnotations] = useState<AIFailureAnnotation[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [selectedAnnotation, setSelectedAnnotation] = useState<AIFailureAnnotation | null>(null);
+  const [annotationSidebarOpen, setAnnotationSidebarOpen] = useState(false);
 
   const loadWaveform = useCallback(async (waveformId: string) => {
     setLoading(true);
@@ -175,6 +259,42 @@ export function WaveformViewer() {
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Comparison failed");
     }
+  };
+
+  // AI Failure Analysis
+  const runAIAnalysis = async () => {
+    if (!uploaded) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const response = await api.post(`/waveform/${uploaded.waveform_id}/analyze`, {});
+      if (response.data.annotations) {
+        setAiAnnotations(response.data.annotations);
+        setAnnotationSidebarOpen(true);
+        toast.success(`AI analysis found ${response.data.annotations.length} anomalies`);
+      } else {
+        setAiAnnotations([]);
+        toast("No anomalies detected");
+      }
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || "AI analysis failed";
+      setAiError(message);
+      toast.error(message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const selectAnnotation = (annotation: AIFailureAnnotation) => {
+    setSelectedAnnotation(annotation);
+    setAnnotationSidebarOpen(true);
+    // Highlight the signal in the waveform
+    setSelected([annotation.signal_name]);
+  };
+
+  const closeAnnotationSidebar = () => {
+    setAnnotationSidebarOpen(false);
+    setSelectedAnnotation(null);
   };
 
   const timeSpan = analysis
@@ -312,6 +432,14 @@ export function WaveformViewer() {
         >
           <GitCompare className="h-4 w-4" />
           Compare
+        </button>
+        <button
+          onClick={runAIAnalysis}
+          disabled={!uploaded || aiLoading}
+          className="flex items-center gap-1 rounded-lg bg-purple-600 px-3 py-2 text-sm text-white hover:bg-purple-700 disabled:opacity-40"
+        >
+          <Sparkles className="h-4 w-4" />
+          AI Analyze
         </button>
       </div>
 
@@ -490,6 +618,99 @@ export function WaveformViewer() {
                 ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* AI Annotation Sidebar */}
+      {annotationSidebarOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end"
+          onClick={closeAnnotationSidebar}
+        >
+          <div className="absolute inset-0 bg-black/50" onClick={closeAnnotationSidebar} />
+          <div
+            className="relative w-full max-w-xl bg-gray-900 rounded-t-2xl shadow-2xl overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-purple-400" />
+                <h3 className="text-lg font-semibold">AI Failure Analysis</h3>
+                <span className="px-2 py-0.5 text-xs bg-purple-600 text-white rounded">
+                  {aiAnnotations.length} anomalies
+                </span>
+              </div>
+              <button onClick={closeAnnotationSidebar} className="p-1 text-gray-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {aiError && (
+              <div className="p-4 border-b border-red-800 bg-red-950/40 text-red-300 text-sm">
+                {aiError}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[60vh]">
+              {aiAnnotations.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Sparkles className="h-12 w-12 mx-auto mb-4 text-gray-600" />
+                  <p className="text-gray-400">No anomalies detected</p>
+                  <p className="text-xs text-gray-500 mt-1">The waveform appears clean</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {aiAnnotations.map((annotation) => (
+                    <div
+                      key={annotation.id}
+                      className={`p-3 rounded-lg border transition-all cursor-pointer ${
+                        SEVERITY_COLORS[annotation.severity].bg
+                      } ${SEVERITY_COLORS[annotation.severity].border}`}
+                      onClick={() => selectAnnotation(annotation)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                                SEVERITY_COLORS[annotation.severity].bg
+                              } ${SEVERITY_COLORS[annotation.severity].text}`}
+                            >
+                              {annotation.severity.toUpperCase()}
+                            </span>
+                            <span className="text-xs text-gray-400 px-2 py-0.5 rounded bg-gray-800">
+                              {Math.round(annotation.confidence)}% confidence
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm font-medium text-gray-100 truncate">
+                            {annotation.signal_name} @ {annotation.time}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-400 truncate">
+                            {annotation.description}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {annotation.related_signals.slice(0, 3).map((sig) => (
+                              <span key={sig} className="px-1.5 py-0.5 text-xs bg-gray-800 text-gray-300 rounded">
+                                {sig}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <ChevronDown className="h-5 w-5 text-gray-500 shrink-0" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-700">
+              <p className="text-xs text-gray-500">
+                Click an annotation to view details. AI analysis is based on pattern
+                recognition and may require manual verification.
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

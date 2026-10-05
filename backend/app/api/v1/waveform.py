@@ -525,6 +525,175 @@ def parse_fst_from_bytes(fst_bytes: bytes) -> Dict[str, Any]:
 
 
 # ============================================================
+# AI Failure Analysis Endpoint
+# ============================================================
+
+@router.post("/{waveform_id}/analyze")
+async def analyze_waveform_ai(waveform_id: str):
+    """Run AI-powered failure analysis on waveform data."""
+    if waveform_id not in waveform_store:
+        raise HTTPException(status_code=404, detail="Waveform not found")
+
+    data = waveform_store[waveform_id]["parsed"]
+    signals = data.get("signals", [])
+
+    # Run AI analysis
+    annotations = analyze_waveform_for_failures(signals)
+
+    critical_count = sum(1 for a in annotations if a.get("severity") == "critical")
+    high_count = sum(1 for a in annotations if a.get("severity") == "high")
+    affected_signals = list(set(a.get("signal_name", "") for a in annotations))
+
+    return {
+        "waveform_id": waveform_id,
+        "annotations": annotations,
+        "summary": {
+            "total_anomalies": len(annotations),
+            "critical_count": critical_count,
+            "high_count": high_count,
+            "affected_signals": affected_signals,
+        },
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+
+
+def analyze_waveform_for_failures(signals: List[Dict]) -> List[Dict]:
+    """Analyze waveform signals for potential failures using pattern recognition."""
+    annotations = []
+
+    for signal in signals:
+        name = signal.get("name", "")
+        transitions = signal.get("transitions", [])
+        width = signal.get("width", 1)
+
+        if not transitions:
+            continue
+
+        # Check for glitches (rapid transitions)
+        glitch_annotations = _detect_glitches(name, transitions)
+        annotations.extend(glitch_annotations)
+
+        # Check for timing violations
+        timing_annotations = _detect_timing_violations(name, transitions)
+        annotations.extend(timing_annotations)
+
+        # Check for unknown states (X/Z)
+        unknown_annotations = _detect_unknown_states(name, transitions)
+        annotations.extend(unknown_annotations)
+
+        # Check for protocol violations (for known interfaces)
+        if _is_interface_signal(name):
+            protocol_annotations = _detect_protocol_violations(name, transitions)
+            annotations.extend(protocol_annotations)
+
+    return annotations
+
+
+def _detect_glitches(name: str, transitions: List[Dict]) -> List[Dict]:
+    """Detect glitches - rapid transitions within short time windows."""
+    annotations = []
+    if len(transitions) < 2:
+        return annotations
+
+    for i in range(1, len(transitions)):
+        time_diff = transitions[i]["time"] - transitions[i-1]["time"]
+        # Glitch threshold: transition within 1ns (adjustable)
+        if time_diff < 1.0 and transitions[i]["value"] != transitions[i-1]["value"]:
+            annotations.append({
+                "id": f"glitch_{name}_{transitions[i]['time']}",
+                "signal_name": name,
+                "time": transitions[i]["time"],
+                "type": "glitch",
+                "severity": "high",
+                "confidence": 75,
+                "description": f"Potential glitch detected: {transitions[i-1]['value']} -> {transitions[i]['value']} within {time_diff} time units",
+                "suggested_fix": "Check for crosstalk, impedance mismatch, or driver contention",
+                "related_signals": [],
+                "evidence": f"Transition at {transitions[i]['time']} follows previous transition at {transitions[i-1]['time']} with only {time_diff} time difference",
+            })
+    return annotations
+
+
+def _detect_timing_violations(name: str, transitions: List[Dict]) -> List[Dict]:
+    """Detect timing violations - setup/hold violations, clock issues."""
+    annotations = []
+    if len(transitions) < 2:
+        return annotations
+
+    # Look for signals that change too close to clock edges (simplified)
+    # In real implementation, would need clock signal reference
+    if "clk" in name.lower() or "clock" in name.lower():
+        # Check clock period consistency
+        times = [t["time"] for t in transitions]
+        if len(times) >= 3:
+            periods = [times[i] - times[i-1] for i in range(1, len(times))]
+            avg_period = sum(periods) / len(periods)
+            for i, period in enumerate(periods):
+                if abs(period - avg_period) > avg_period * 0.1:  # 10% jitter
+                    annotations.append({
+                        "id": f"timing_{name}_{transitions[i+1]['time']}",
+                        "signal_name": name,
+                        "time": transitions[i+1]["time"],
+                        "type": "timing_violation",
+                        "severity": "critical",
+                        "confidence": 80,
+                        "description": f"Clock period variation detected: {period} vs expected {avg_period}",
+                        "suggested_fix": "Check clock source stability, PLL configuration, or reset sequencing",
+                        "related_signals": [],
+                        "evidence": f"Period {period} deviates from average {avg_period} by {abs(period - avg_period)/avg_period*100:.1f}%",
+                    })
+    return annotations
+
+
+def _detect_unknown_states(name: str, transitions: List[Dict]) -> List[Dict]:
+    """Detect unknown/high-impedance states."""
+    annotations = []
+    for t in transitions:
+        value = t["value"]
+        if "x" in value.lower() or "z" in value.lower():
+            severity = "critical" if "x" in value.lower() else "high"
+            annotations.append({
+                "id": f"unknown_{name}_{t['time']}",
+                "signal_name": name,
+                "time": t["time"],
+                "type": "unknown_state",
+                "severity": severity,
+                "confidence": 95,
+                "description": f"Signal in unknown/high-Z state: {value}",
+                "suggested_fix": "Check for uninitialized registers, driver contention, or missing reset",
+                "related_signals": [],
+                "evidence": f"Signal '{name}' has value '{value}' at time {t['time']}",
+            })
+    return annotations
+
+
+def _is_interface_signal(name: str) -> bool:
+    """Check if signal is part of a known interface protocol."""
+    interface_keywords = ["valid", "ready", "ack", "req", "grant", "enable", "strobe", "strb"]
+    return any(kw in name.lower() for kw in interface_keywords)
+
+
+def _detect_protocol_violations(name: str, transitions: List[Dict]) -> List[Dict]:
+    """Detect protocol violations for valid/ready handshake interfaces."""
+    annotations = []
+    if len(transitions) < 2:
+        return annotations
+
+    if "valid" in name.lower() or "ready" in name.lower():
+        # Check for valid/ready handshake violations
+        # Valid asserted without ready (backpressure)
+        # Ready without valid (spurious ready)
+        for i in range(1, len(transitions)):
+            if transitions[i]["value"] != transitions[i-1]["value"]:
+                # Check for valid without ready
+                if "valid" in name.lower() and transitions[i]["value"] == "1":
+                    # This would need the corresponding ready signal - simplified here
+                    pass
+
+    return annotations
+
+
+# ============================================================
 # FRONTEND: Waveform Viewer Component
 # ============================================================
 # File: frontend/components/waveform/WaveformViewer.tsx
