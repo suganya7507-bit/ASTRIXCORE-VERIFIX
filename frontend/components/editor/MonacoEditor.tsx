@@ -2,120 +2,8 @@
 
 import React, { useRef, useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
-import * as monaco from "monaco-editor";
+import type * as monaco from "monaco-editor";
 import { cn } from "@/lib/utils";
-
-// Register SystemVerilog language
-if (typeof window !== "undefined") {
-  monaco.languages.register({ id: "systemverilog" });
-  monaco.languages.setMonarchTokensProvider("systemverilog", {
-    keywords: [
-      "module", "endmodule", "interface", "endinterface", "package", "endpackage",
-      "program", "endprogram", "class", "endclass", "function", "endfunction",
-      "task", "endtask", "initial", "always", "always_comb", "always_ff", "always_latch",
-      "if", "else", "case", "casez", "casex", "endcase", "default",
-      "for", "while", "repeat", "foreach", "forever", "break", "continue",
-      "return", "begin", "end", "fork", "join", "join_any", "join_none",
-      "wait", "wait_until", "expect", "assume", "assert", "cover",
-      "property", "endproperty", "sequence", "endsequence",
-      "input", "output", "inout", "ref", "const",
-      "logic", "bit", "byte", "shortint", "int", "longint",
-      "integer", "time", "real", "shortreal", "realtime",
-      "string", "chandle", "event", "void",
-      "signed", "unsigned", "rand", "randc",
-      "localparam", "parameter", "typedef", "enum", "struct", "union",
-      "virtual", "protected", "local", "static", "automatic",
-      "import", "export", "package", "include",
-      "posedge", "negedge", "edge", "disable", "deassign", "force", "release",
-      "assign", "deassign", "bind", "config", "design", "cell", "instance",
-      "default", "case", "endcase", "casez", "casex",
-      "generate", "endgenerate", "if", "else", "elsif",
-    ],
-    operators: [
-      "=", ">", "<", "!", "~", "?", ":",
-      "==", "<=", ">=", "!=", "&&", "||", "++", "--",
-      "+", "-", "*", "/", "%", "&", "|", "^", "~", "<<", ">>",
-      "===", "!==", "~&", "~|", "~^", "^~",
-      "->", "<->", "##", "##[", "=:", "=~", "=~>",
-    ],
-    symbols: /[=><!~?:&|+\-*/%^]+/,
-    escapes: /\\(?:[abfnrtv\\"']|x[0-9A-Fa-f]{1,4}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8})/,
-    tokenizer: {
-      root: [
-        [/[a-zA-Z_$][\w$]*/, { cases: { "@keywords": "keyword", "@default": "identifier" } }],
-        [/[0-9]+'[sbdo][0-9a-zA-Z_]+/, "number"],
-        [/[0-9]+\.[0-9]+([eE][\-+]?[0-9]+)?/, "number.float"],
-        [/[0-9]+/, "number"],
-        [/"([^"\\]|\\.)*$/, "string.invalid"],
-        [/"/, "string", "@string"],
-        [/`[a-zA-Z_][\w$]*/, "metatag"],
-        [/@symbols/, { cases: { "@operators": "operator", "@default": "" } }],
-        [/[;,.]/, "delimiter"],
-        [/[{}[\]]/, "@brackets"],
-        [/\/\*/, "comment", "@comment"],
-        [/\/\/.*$/, "comment"],
-      ],
-      string: [
-        [/[^\\"]+/, "string"],
-        [/@escapes/, "string.escape"],
-        [/\\./, "string.escape.invalid"],
-        [/"/, "string", "@pop"],
-      ],
-      comment: [
-        [/[^\/*]+/, "comment"],
-        [/\*\//, "comment", "@pop"],
-        [/[\/*]/, "comment"],
-      ],
-    },
-  });
-
-  // Define SystemVerilog language configuration
-  monaco.languages.setLanguageConfiguration("systemverilog", {
-    comments: {
-      lineComment: "//",
-      blockComment: ["/*", "*/"],
-    },
-    brackets: [
-      ["{", "}"],
-      ["[", "]"],
-      ["(", ")"],
-      ["begin", "end"],
-      ["module", "endmodule"],
-      ["interface", "endinterface"],
-      ["function", "endfunction"],
-      ["task", "endtask"],
-      ["class", "endclass"],
-      ["case", "endcase"],
-      ["generate", "endgenerate"],
-    ],
-    autoClosingPairs: [
-      { open: "{", close: "}" },
-      { open: "[", close: "]" },
-      { open: "(", close: ")" },
-      { open: '"', close: '"' },
-      { open: "'", close: "'" },
-      { open: "`", close: "`" },
-      { open: "begin", close: "end" },
-      { open: "module", close: "endmodule" },
-      { open: "function", close: "endfunction" },
-      { open: "task", close: "endtask" },
-      { open: "case", close: "endcase" },
-    ],
-    surroundingPairs: [
-      { open: "{", close: "}" },
-      { open: "[", close: "]" },
-      { open: "(", close: ")" },
-      { open: '"', close: '"' },
-      { open: "'", close: "'" },
-    ],
-    folding: {
-      markers: {
-        start: new RegExp("^\\s*//\\s*#?region\\b"),
-        end: new RegExp("^\\s*//\\s*#?endregion\\b"),
-      },
-    },
-  });
-}
 
 interface MonacoEditorProps {
   value: string;
@@ -176,8 +64,7 @@ export function MonacoEditor({
 
   const handleEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
-    
-    // Configure editor options
+
     editor.updateOptions({
       minimap: { enabled: minimap },
       lineNumbers,
@@ -210,39 +97,152 @@ export function MonacoEditor({
       guides: {
         bracketPairs: true,
         indentation: true,
+        highlightActiveIndentation: true,
       },
       renderWhitespace: "selection",
       renderControlCharacters: true,
-      renderIndentGuides: true,
-      highlightActiveIndentGuide: true,
     });
   };
 
   const handleEditorWillMount = (monacoInstance: typeof monaco) => {
-    // Register custom language features
+    // Register SystemVerilog language if not registered
+    if (!monacoInstance.languages.getLanguages().some((lang) => lang.id === "systemverilog")) {
+      monacoInstance.languages.register({ id: "systemverilog" });
+
+      monacoInstance.languages.setMonarchTokensProvider("systemverilog", {
+        keywords: [
+          "module", "endmodule", "interface", "endinterface", "package", "endpackage",
+          "program", "endprogram", "class", "endclass", "function", "endfunction",
+          "task", "endtask", "initial", "always", "always_comb", "always_ff", "always_latch",
+          "if", "else", "case", "casez", "casex", "endcase", "default",
+          "for", "while", "repeat", "foreach", "forever", "break", "continue",
+          "return", "begin", "end", "fork", "join", "join_any", "join_none",
+          "wait", "wait_until", "expect", "assume", "assert", "cover",
+          "property", "endproperty", "sequence", "endsequence",
+          "input", "output", "inout", "ref", "const",
+          "logic", "bit", "byte", "shortint", "int", "longint",
+          "integer", "time", "real", "shortreal", "realtime",
+          "string", "chandle", "event", "void",
+          "signed", "unsigned", "rand", "randc",
+          "localparam", "parameter", "typedef", "enum", "struct", "union",
+          "virtual", "protected", "local", "static", "automatic",
+          "import", "export", "package", "include",
+          "posedge", "negedge", "edge", "disable", "deassign", "force", "release",
+          "assign", "deassign", "bind", "config", "design", "cell", "instance",
+          "generate", "endgenerate", "if", "else", "elsif",
+        ],
+        operators: [
+          "=", ">", "<", "!", "~", "?", ":",
+          "==", "<=", ">=", "!=", "&&", "||", "++", "--",
+          "+", "-", "*", "/", "%", "&", "|", "^", "~", "<<", ">>",
+          "===", "!==", "~&", "~|", "~^", "^~",
+          "->", "<->", "##", "##[", "=:", "=~", "=~>",
+        ],
+        symbols: /[=><!~?:&|+\-*/%^]+/,
+        escapes: /\\(?:[abfnrtv\\"']|x[0-9A-Fa-f]{1,4}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8})/,
+        tokenizer: {
+          root: [
+            [/[a-zA-Z_$][\w$]*/, { cases: { "@keywords": "keyword", "@default": "identifier" } }],
+            [/[0-9]+'[sbdo][0-9a-zA-Z_]+/, "number"],
+            [/[0-9]+\.[0-9]+([eE][\-+]?[0-9]+)?/, "number.float"],
+            [/[0-9]+/, "number"],
+            [/"([^"\\]|\\.)*$/, "string.invalid"],
+            [/"/, "string", "@string"],
+            [/`[a-zA-Z_][\w$]*/, "metatag"],
+            [/@symbols/, { cases: { "@operators": "operator", "@default": "" } }],
+            [/[;,.]/, "delimiter"],
+            [/[{}[\]]/, "@brackets"],
+            [/\/\*/, "comment", "@comment"],
+            [/\/\/.*$/, "comment"],
+          ],
+          string: [
+            [/[^\\"]+/, "string"],
+            [/@escapes/, "string.escape"],
+            [/\\./, "string.escape.invalid"],
+            [/"/, "string", "@pop"],
+          ],
+          comment: [
+            [/[^\/*]+/, "comment"],
+            [/\*\//, "comment", "@pop"],
+            [/[\/*]/, "comment"],
+          ],
+        },
+      });
+
+      monacoInstance.languages.setLanguageConfiguration("systemverilog", {
+        comments: {
+          lineComment: "//",
+          blockComment: ["/*", "*/"],
+        },
+        brackets: [
+          ["{", "}"],
+          ["[", "]"],
+          ["(", ")"],
+          ["begin", "end"],
+          ["module", "endmodule"],
+          ["interface", "endinterface"],
+          ["function", "endfunction"],
+          ["task", "endtask"],
+          ["class", "endclass"],
+          ["case", "endcase"],
+          ["generate", "endgenerate"],
+        ],
+        autoClosingPairs: [
+          { open: "{", close: "}" },
+          { open: "[", close: "]" },
+          { open: "(", close: ")" },
+          { open: '"', close: '"' },
+          { open: "'", close: "'" },
+          { open: "`", close: "`" },
+          { open: "begin", close: "end" },
+          { open: "module", close: "endmodule" },
+          { open: "function", close: "endfunction" },
+          { open: "task", close: "endtask" },
+          { open: "case", close: "endcase" },
+        ],
+        surroundingPairs: [
+          { open: "{", close: "}" },
+          { open: "[", close: "]" },
+          { open: "(", close: ")" },
+          { open: '"', close: '"' },
+          { open: "'", close: "'" },
+        ],
+        folding: {
+          markers: {
+            start: new RegExp("^\\s*//\\s*#?region\\b"),
+            end: new RegExp("^\\s*//\\s*#?endregion\\b"),
+          },
+        },
+      });
+    }
+
+    // Register custom completion provider
     monacoInstance.languages.registerCompletionItemProvider("systemverilog", {
       provideCompletionItems: (model, position) => {
-        const textUntilPosition = model.getValueInRange({
+        const word = model.getWordUntilPosition(position);
+        const range = {
           startLineNumber: position.lineNumber,
-          startColumn: 1,
           endLineNumber: position.lineNumber,
-          endColumn: position.column,
-        });
+          startColumn: word.startColumn,
+          endColumn: word.endColumn,
+        };
 
         const suggestions = [
           {
             label: "module",
             kind: monacoInstance.languages.CompletionItemKind.Snippet,
-            insertText: "module ${1:name} (${2:ports});\n\n  ${3}\n\nendmodule",
+            insertText: "module ${1:name} (${2:ports});\n\n${3}\n\nendmodule",
             insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
             documentation: "Module declaration",
+            range,
           },
           {
             label: "always_ff",
             kind: monacoInstance.languages.CompletionItemKind.Snippet,
-            insertText: "always_ff @(posedge ${1:clk} or negedge ${2:rst_n}) begin\n  if (!${2:rst_n}) begin\n    ${3}\n  end else begin\n    ${4}\n  end\nend",
+            insertText: "always_ff @(posedge ${1:clk} or negedge ${2:rst_n}) begin\n  if (!${2:rst_n}) begin\n    ${3}\n  end else begin\n${4}\n  end\nend",
             insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
             documentation: "Sequential always block with async reset",
+            range,
           },
           {
             label: "always_comb",
@@ -250,34 +250,39 @@ export function MonacoEditor({
             insertText: "always_comb begin\n  ${1}\nend",
             insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
             documentation: "Combinational always block",
+            range,
           },
           {
             label: "case",
             kind: monacoInstance.languages.CompletionItemKind.Snippet,
-            insertText: "case (${1:expr})\n  ${2:val}: begin\n    ${3}\n  end\n  default: begin\n    ${4}\n  end\nendcase",
+            insertText: "case (${1:expr})\n${2:val}: begin\n    ${3}\n  end\n  default: begin\n${4}\n  end\nendcase",
             insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
             documentation: "Case statement",
+            range,
           },
           {
             label: "assert",
             kind: monacoInstance.languages.CompletionItemKind.Snippet,
-            insertText: "property ${1:name}_p;\n  @(posedge ${2:clk}) disable iff (${3:rst})\n  ${4:condition} |-> ${5:consequence};\nendproperty\n${1:name}_a: assert property (${1:name}_p);",
+            insertText: "property ${1:name}_p;\n  @(posedge ${2:clk}) disable iff (${3:rst})\n  ${4:condition} \vert{}->${5:consequence};\nendproperty\n${1:name}_a: assert property (${1:name}_p);",
             insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
             documentation: "Assertion property",
+            range,
           },
           {
             label: "cover",
             kind: monacoInstance.languages.CompletionItemKind.Snippet,
-            insertText: "property ${1:name}_p;\n  @(posedge ${2:clk}) disable iff (${3:rst})\n  ${4:condition};\nendproperty\n${1:name}_c: cover property (${1:name}_p);",
+            insertText: "property ${1:name}_p;\n  @(posedge ${2:clk}) disable iff (${3:rst})\n${4:condition};\nendproperty\n${1:name}_c: cover property (${1:name}_p);",
             insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
             documentation: "Cover property",
+            range,
           },
           {
             label: "typedef enum",
             kind: monacoInstance.languages.CompletionItemKind.Snippet,
-            insertText: "typedef enum logic [${1:1}:0] {\n  ${2:STATE_0} = ${3:2'b00},\n  ${4:STATE_1} = ${5:2'b01},\n  ${6:STATE_2} = ${7:2'b10},\n  ${8:STATE_3} = ${9:2'b11}\n} ${10:state_t};",
+            insertText: "typedef enum logic [${1:1}:0] {\n${2:STATE_0} = ${3:2'b00},\n${4:STATE_1} = ${5:2'b01},\n${6:STATE_2} = ${7:2'b10},\n${8:STATE_3} = ${9:2'b11}\n}${10:state_t};",
             insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
             documentation: "Enum type declaration",
+            range,
           },
         ];
 
@@ -354,9 +359,9 @@ export function MonacoEditor({
       defaultLanguage={language}
       theme={theme}
       value={value}
-      onChange={(val) => val && onChange(val)}
+      onChange={(val) => val !== undefined && onChange(val)}
       onMount={handleEditorDidMount}
-      onBeforeMount={handleEditorWillMount}
+      beforeMount={handleEditorWillMount}
       options={{
         minimap: { enabled: minimap },
         lineNumbers,
@@ -389,11 +394,10 @@ export function MonacoEditor({
         guides: {
           bracketPairs: true,
           indentation: true,
+          highlightActiveIndentation: true,
         },
         renderWhitespace: "selection",
         renderControlCharacters: true,
-        renderIndentGuides: true,
-        highlightActiveIndentGuide: true,
       }}
       className={cn("border border-gray-700 rounded-lg bg-gray-950", className)}
     />
