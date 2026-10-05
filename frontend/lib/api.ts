@@ -49,6 +49,34 @@ export const api = {
   },
 };
 
+export const verificationApi = {
+  async getPlan(id?: string) {
+    return api.get(`/verification/plan${id ? `/${id}` : ''}`);
+  },
+
+  async generatePlan(data: any) {
+    return api.post('/verification/plan', data);
+  },
+
+  async verifyRTL(data: any) {
+    return api.post('/verification/verify', data);
+  },
+};
+
+export const projectsApi = {
+  async getAll() {
+    return api.get('/projects');
+  },
+
+  async getById(id: string) {
+    return api.get(`/projects/${id}`);
+  },
+
+  async create(data: any) {
+    return api.post('/projects', data);
+  },
+};
+
 export const simulationApi = {
   async run(data: {
     rtl_content: string;

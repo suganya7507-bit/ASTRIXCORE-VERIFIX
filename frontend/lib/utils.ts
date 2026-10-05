@@ -16,6 +16,7 @@ export function formatDuration(seconds: number): string {
   const secs = (seconds % 60).toFixed(1);
   return `${mins}m ${secs}s`;
 }
+
 export function formatDate(dateString: string | Date): string {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -26,4 +27,10 @@ export function formatDate(dateString: string | Date): string {
         day: 'numeric',
         year: 'numeric',
       });
+}
+
+export function getConfidenceColor(score: number): string {
+  if (score >= 80) return 'text-green-500 bg-green-50 dark:bg-green-950/50';
+  if (score >= 50) return 'text-yellow-500 bg-yellow-50 dark:bg-yellow-950/50';
+  return 'text-red-500 bg-red-50 dark:bg-red-950/50';
 }
