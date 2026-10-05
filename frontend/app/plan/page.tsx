@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { verificationApi } from '@/lib/api';
-import { formatDate, getConfidenceColor } from '@/lib/utils';
+import { getConfidenceColor } from '@/lib/utils';
 
 export default function PlanPage() {
   const [rtlContent, setRtlContent] = useState('');
