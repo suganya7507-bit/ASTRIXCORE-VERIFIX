@@ -16,3 +16,14 @@ export function formatDuration(seconds: number): string {
   const secs = (seconds % 60).toFixed(1);
   return `${mins}m ${secs}s`;
 }
+export function formatDate(dateString: string | Date): string {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return isNaN(date.getTime())
+    ? String(dateString)
+    : date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+}
